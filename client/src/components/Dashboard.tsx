@@ -8,9 +8,8 @@ interface FileItem {
   filename: string;
   original_name: string;
   file_size: number;
-  mime_type: string;
-  is_shared: boolean;
   uploaded_at: string;
+  is_shared: boolean;
 }
 
 const Dashboard: React.FC = () => {
@@ -19,6 +18,9 @@ const Dashboard: React.FC = () => {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [shareUrl, setShareUrl] = useState<string>('');
+
+  const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:3000';
 
   useEffect(() => {
     loadFiles();
@@ -27,7 +29,7 @@ const Dashboard: React.FC = () => {
   const loadFiles = async () => {
     try {
       const token = localStorage.getItem('token');
-      const response = await axios.get('http://localhost:3000/api/files', {
+      const response = await axios.get(`${API_BASE_URL}/api/files`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       setFiles(response.data);
@@ -54,7 +56,7 @@ const Dashboard: React.FC = () => {
 
     try {
       const token = localStorage.getItem('token');
-      await axios.post('http://localhost:3000/api/upload', formData, {
+      await axios.post(`${API_BASE_URL}/api/upload`, formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
           Authorization: `Bearer ${token}`
@@ -62,11 +64,10 @@ const Dashboard: React.FC = () => {
       });
       
       setSelectedFile(null);
-      // Limpiar el input
-      const fileInput = document.querySelector('.file-input') as HTMLInputElement;
+      const fileInput = document.getElementById('file-input') as HTMLInputElement;
       if (fileInput) fileInput.value = '';
       
-      loadFiles(); // Recargar la lista
+      loadFiles();
       alert('Archivo subido exitosamente');
     } catch (error) {
       console.error('Error uploading file:', error);
@@ -79,7 +80,7 @@ const Dashboard: React.FC = () => {
   const handleDownload = async (fileId: number, filename: string) => {
     try {
       const token = localStorage.getItem('token');
-      const response = await axios.get(`http://localhost:3000/api/files/${fileId}/download`, {
+      const response = await axios.get(`${API_BASE_URL}/api/files/${fileId}/download`, {
         headers: { Authorization: `Bearer ${token}` },
         responseType: 'blob'
       });
@@ -102,20 +103,14 @@ const Dashboard: React.FC = () => {
   const handleShare = async (fileId: number) => {
     try {
       const token = localStorage.getItem('token');
-      const response = await axios.post(`http://localhost:3000/api/files/${fileId}/share`, {}, {
+      const response = await axios.post(`${API_BASE_URL}/api/files/${fileId}/share`, {}, {
         headers: { Authorization: `Bearer ${token}` }
       });
       
-      const shareUrl = response.data.shareUrl;
-      
-      // Copiar al portapapeles
-      navigator.clipboard.writeText(shareUrl).then(() => {
-        alert(`Archivo compartido! URL copiada al portapapeles:\n${shareUrl}`);
-      }).catch(() => {
-        alert(`Archivo compartido! URL:\n${shareUrl}`);
-      });
-      
-      loadFiles(); // Recargar para actualizar estado de compartido
+      setShareUrl(response.data.shareUrl);
+      alert('Archivo compartido. URL copiada al portapapeles');
+      navigator.clipboard.writeText(response.data.shareUrl);
+      loadFiles();
     } catch (error) {
       console.error('Error sharing file:', error);
       alert('Error al compartir archivo');
@@ -123,18 +118,16 @@ const Dashboard: React.FC = () => {
   };
 
   const handleDelete = async (fileId: number) => {
-    if (!window.confirm('¿Estás seguro de que quieres eliminar este archivo?')) {
-      return;
-    }
-
+    if (!window.confirm('¿Estás seguro de eliminar este archivo?')) return;
+    
     try {
       const token = localStorage.getItem('token');
-      await axios.delete(`http://localhost:3000/api/files/${fileId}`, {
+      await axios.delete(`${API_BASE_URL}/api/files/${fileId}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       
+      loadFiles();
       alert('Archivo eliminado exitosamente');
-      loadFiles(); // Recargar la lista
     } catch (error) {
       console.error('Error deleting file:', error);
       alert('Error al eliminar archivo');
@@ -156,9 +149,9 @@ const Dashboard: React.FC = () => {
   return (
     <div className="dashboard">
       <header className="dashboard-header">
-        <h1>📁 Sistema de Compartición de Archivos</h1>
+        <h1>🔒 Sistema de Compartición de Archivos Seguro</h1>
         <div className="user-info">
-          <span>Bienvenido, {user?.username}</span>
+          <span>👤 Bienvenido, {user?.username}</span>
           <button onClick={logout} className="logout-btn">Cerrar Sesión</button>
         </div>
       </header>
@@ -168,16 +161,16 @@ const Dashboard: React.FC = () => {
           <h2>📤 Subir Archivo</h2>
           <div className="upload-form">
             <input
+              id="file-input"
               type="file"
               onChange={handleFileSelect}
               className="file-input"
-              accept=".jpeg,.jpg,.png,.gif,.pdf,.txt,.doc,.docx,.xls,.xlsx,.zip,.rar"
+              accept=".jpg,.jpeg,.png,.gif,.pdf,.txt,.doc,.docx,.xls,.xlsx,.zip,.rar"
             />
             {selectedFile && (
               <div className="selected-file">
                 <p><strong>Archivo seleccionado:</strong> {selectedFile.name}</p>
                 <p><strong>Tamaño:</strong> {formatFileSize(selectedFile.size)}</p>
-                <p><strong>Tipo:</strong> {selectedFile.type}</p>
               </div>
             )}
             <button
@@ -191,71 +184,63 @@ const Dashboard: React.FC = () => {
         </div>
 
         <div className="files-section">
-          <h2>📂 Mis Archivos ({files.length})</h2>
+          <h2>📁 Mis Archivos ({files.length})</h2>
           {loading ? (
-            <div className="loading">
-              <p>⏳ Cargando archivos...</p>
-            </div>
+            <div className="loading">⏳ Cargando archivos...</div>
           ) : files.length === 0 ? (
-            <div className="no-files">
-              <p>📭 No tienes archivos subidos aún</p>
-              <p>Sube tu primer archivo usando el formulario de arriba</p>
+            <div className="empty-state">
+              📭 No hay archivos disponibles. ¡Sube tu primer archivo!
             </div>
           ) : (
-            <div className="files-table">
-              <table>
-                <thead>
-                  <tr>
-                    <th>📄 Nombre</th>
-                    <th>📊 Tamaño</th>
-                    <th>🗂️ Tipo</th>
-                    <th>📅 Fecha</th>
-                    <th>🔗 Estado</th>
-                    <th>⚙️ Acciones</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {files.map(file => (
-                    <tr key={file.id}>
-                      <td className="filename">{file.original_name}</td>
-                      <td>{formatFileSize(file.file_size)}</td>
-                      <td>{file.mime_type}</td>
-                      <td>{formatDate(file.uploaded_at)}</td>
-                      <td>
-                        <span className={`status ${file.is_shared ? 'shared' : 'private'}`}>
-                          {file.is_shared ? '🔗 Compartido' : '🔒 Privado'}
-                        </span>
-                      </td>
-                      <td className="actions">
-                        <button
-                          onClick={() => handleDownload(file.id, file.original_name)}
-                          className="action-btn download-btn"
-                          title="Descargar archivo"
-                        >
-                          ⬇️
-                        </button>
-                        <button
-                          onClick={() => handleShare(file.id)}
-                          className="action-btn share-btn"
-                          title="Compartir archivo"
-                        >
-                          🔗
-                        </button>
-                        <button
-                          onClick={() => handleDelete(file.id)}
-                          className="action-btn delete-btn"
-                          title="Eliminar archivo"
-                        >
-                          🗑️
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            <div className="files-grid">
+              {files.map(file => (
+                <div key={file.id} className="file-card">
+                  <div className="file-icon">📄</div>
+                  <div className="file-info">
+                    <h3>{file.original_name}</h3>
+                    <p className="file-size">{formatFileSize(file.file_size)}</p>
+                    <p className="file-date">{formatDate(file.uploaded_at)}</p>
+                    {file.is_shared && <span className="shared-badge">🔗 Compartido</span>}
+                  </div>
+                  <div className="file-actions">
+                    <button
+                      onClick={() => handleDownload(file.id, file.original_name)}
+                      className="action-btn download-btn"
+                      title="Descargar"
+                    >
+                      ⬇️
+                    </button>
+                    <button
+                      onClick={() => handleShare(file.id)}
+                      className="action-btn share-btn"
+                      title="Compartir"
+                    >
+                      🔗
+                    </button>
+                    <button
+                      onClick={() => handleDelete(file.id)}
+                      className="action-btn delete-btn"
+                      title="Eliminar"
+                    >
+                      🗑️
+                    </button>
+                  </div>
+                </div>
+              ))}
             </div>
           )}
         </div>
+
+        {shareUrl && (
+          <div className="share-modal">
+            <div className="share-content">
+              <h3>🔗 Archivo Compartido</h3>
+              <p>URL de compartición:</p>
+              <input type="text" value={shareUrl} readOnly />
+              <button onClick={() => setShareUrl('')}>Cerrar</button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

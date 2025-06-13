@@ -371,6 +371,25 @@ app.get('/api/health', (req, res) => {
     res.json({ status: 'OK', timestamp: new Date().toISOString() });
 });
 
+// Servir archivos estáticos del cliente React en producción
+if (process.env.NODE_ENV === 'production') {
+    app.use(express.static(path.join(__dirname, '../client/build')));
+    
+    app.get('*', (req, res) => {
+        res.sendFile(path.join(__dirname, '../client/build', 'index.html'));
+    });
+}
+
+// Inicializar servidor SFTP
+if (process.env.ENABLE_SFTP !== 'false') {
+    try {
+        require('./sftp-server');
+        console.log('Servidor SFTP inicializado');
+    } catch (error) {
+        console.log('SFTP no disponible:', error.message);
+    }
+}
+
 app.listen(PORT, () => {
     console.log(`Servidor ejecutándose en puerto ${PORT}`);
     console.log(`Modo: ${process.env.NODE_ENV || 'development'}`);
